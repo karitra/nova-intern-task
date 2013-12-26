@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE web-app
+    PUBLIC "-//Sun Microsystems, Inc.//DTD Web Application 2.3//EN"
+    "http://java.sun.com/dtd/web-app_2_3.dtd">
+
+<web-app>
+
+  <!-- Servlets -->
+  <servlet>
+    <servlet-name>greetServlet</servlet-name>
+    <servlet-class>com.hwbs.intertask.server.GreetingServiceImpl</servlet-class>
+      <load-on-startup>0</load-on-startup>
+  </servlet>
+
+    <servlet>
+        <servlet-name>requestFactory</servlet-name>
+        <servlet-class>com.google.web.bindery.requestfactory.server.RequestFactoryServlet</servlet-class>
+        <init-param>
+            <param-name>symbolMapsDirectory</param-name>
+            <param-value>>WEB-INF/classes/symbolMaps/</param-value>
+        </init-param>
+    </servlet>
+    
+    <servlet-mapping>
+        <servlet-name>requestFactory</servlet-name>
+        <url-pattern>/gwtRequest</url-pattern>
+    </servlet-mapping>
+
+    <!--
+  <servlet-mapping>
+    <servlet-name>greetServlet</servlet-name>
+    <url-pattern>/NameViewer/greet</url-pattern>
+  </servlet-mapping>
+  -->
+
+   <servlet-mapping>
+     <servlet-name>greetServlet</servlet-name>
+     <url-pattern>/NViewer/greet</url-pattern>
+   </servlet-mapping>
+
+
+    <!-- Default page to serve -->
+  <welcome-file-list>
+    <!-- <welcome-file>NameViewer.html</welcome-file> -->
+      <welcome-file>index.html</welcome-file>
+  </welcome-file-list>
+
+
+  <servlet>
+        <servlet-name>jUnitHostImpl</servlet-name>
+        <servlet-class>com.google.gwt.junit.server.JUnitHostImpl</servlet-class>
+  </servlet>
+  <servlet-mapping>
+        <servlet-name>jUnitHostImpl</servlet-name>
+        <url-pattern>/NameViewer/junithost/*</url-pattern>
+  </servlet-mapping>
+
+</web-app>

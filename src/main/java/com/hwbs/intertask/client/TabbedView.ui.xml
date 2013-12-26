@@ -1,0 +1,65 @@
+<ui:UiBinder xmlns:ui='urn:ui:com.google.gwt.uibinder'
+             xmlns:g='urn:import:com.google.gwt.user.client.ui'
+             xmlns:ext='urn:import:com.hwbs.intertask.client.ui'>
+    <ui:style>
+        @external .gwt-Button;
+        .gwt-Button {
+            font-size: 140%;
+        }
+
+        @external .gwt-DataGrid;
+        .gwt-DataGrid {
+            padding: 2px;
+        }
+    </ui:style>
+
+    <g:LayoutPanel>
+        <g:layer left="15Em" right="15Em" bottom="25%" top="25%">
+            <g:TabLayoutPanel ui:field="tabPanel" barHeight="2" barUnit="EM" >
+                <g:tab>
+                    <g:header>Generator</g:header>
+                    <g:VerticalPanel width="100%" height="100%" visible="false">
+                        <g:cell horizontalAlignment="ALIGN_CENTER" verticalAlignment="ALIGN_MIDDLE">
+                            <g:Button focus="true" ui:field="genBt"/>
+                        </g:cell>
+
+                        <!--
+                        <g:cell horizontalAlignment="ALIGN_CENTER" verticalAlignment="ALIGN_MIDDLE">
+                            <g:Button ui:field="genDummyBt"/>
+                        </g:cell>
+                        -->
+
+                    </g:VerticalPanel>
+                </g:tab>
+                <g:tab>
+                    <g:header>View</g:header>
+                    <g:LayoutPanel>
+                    <g:layer left="5%" right="5%" top="5%" bottom="5%">
+                        <ext:LazyLoadDataGrid ui:field="namesGrid" width="100%" height="100%"/>
+                    </g:layer>
+                    </g:LayoutPanel>
+                </g:tab>
+                <!--
+                <g:tab>
+                    <g:header>Debug</g:header>
+                    <g:LayoutPanel>
+                        <g:layer left="10%" right="10%" top="10%" bottom="10%">
+                            <g:HorizontalPanel>
+                                <g:cell>
+
+                                    <c:CellTable ui:field='namesTable' />
+
+                                </g:cell>
+                                <g:cell>
+                                    <g:NativeVerticalScrollbar ui:field="scroll" height="100%"/>
+                                </g:cell>
+                            </g:HorizontalPanel>
+                        </g:layer>
+                    </g:LayoutPanel>
+                </g:tab>
+                -->
+            </g:TabLayoutPanel>
+        </g:layer>
+    </g:LayoutPanel>
+
+</ui:UiBinder>

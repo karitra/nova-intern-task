@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module rename-to='NViewer'>
+    <!-- Inherit the core Web Toolkit stuff.                        -->
+    <inherits name='com.google.gwt.user.User'/>
+
+    <!-- We need the JUnit module in the main module,               -->
+    <!-- otherwise eclipse complains (Google plugin bug?)           -->
+    <inherits name='com.google.gwt.junit.JUnit'/>
+
+    <!-- Inherit the default GWT style sheet.  You can change       -->
+    <!-- the theme of your GWT application by uncommenting          -->
+    <!-- any one of the following lines.                            -->
+
+
+    <inherits name='com.google.gwt.user.theme.standard.Standard'/>
+
+    <!-- <inherits name='com.google.gwt.user.theme.chrome.Chrome'/> -->
+    <!--
+    <inherits name='com.google.gwt.user.theme.dark.Dark'/>
+    -->
+
+    <!-- Other module inherits                                      -->
+    <inherits name="com.google.gwt.i18n.I18N"/>
+    <inherits name="com.google.gwt.logging.Logging"/>
+    <inherits name='com.google.web.bindery.requestfactory.RequestFactory' />
+
+
+    <!-- Specify the app entry point class.                         -->
+    <entry-point class='com.hwbs.intertask.client.NViewer'/>
+
+    <!-- Specify the paths for translatable code                    -->
+    <source path='client'/>
+    <source path='shared'/>
+
+    <!-- Locale support -->
+    <extend-property       name="locale" values="ru"/>
+    <extend-property       name="locale" values="en"/>
+
+    <set-property-fallback name="locale" value="en" />
+    <!-- diable funcy-stiky window in browser -->
+    <set-property name="gwt.logging.popupHandler" value="DISABLED" />
+
+</module>
