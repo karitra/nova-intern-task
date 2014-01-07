@@ -39,7 +39,7 @@ public class Executor {
         this(threadPerCore, itemsNum, subTaskSize, false);
     }
 
-    private Executor(int threadPerCore, int itemsNum, int subTaskSize, boolean sentential) {
+    private Executor(int threadPerCore, int itemsNum, int subTaskSize, boolean sequence) {
         //
         // sanity check
         //
@@ -56,7 +56,7 @@ public class Executor {
 
         // System.err.printf("items: %d, subtask_size: %d\n", itemsNum, subTaskSize);
 
-        if (sentential) {
+        if (!sequence) {
             if (threadPerCore <= 0)
                 threadPerCore  = 1;
 
@@ -65,7 +65,7 @@ public class Executor {
             //
             int cores = Runtime.getRuntime().availableProcessors();
 
-            logger.log(Level.INFO, "number of threads in pool: " + threadPerCore * cores );
+            //logger.log(Level.INFO, "number of threads in pool: " + threadPerCore * cores );
             pool = Executors.newFixedThreadPool(threadPerCore * cores);
         } else {
             pool = Executors.newSingleThreadExecutor();

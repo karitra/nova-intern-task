@@ -10,6 +10,6 @@ package com.hwbs.intertask.client;
 public interface ClientMessages extends com.google.gwt.i18n.client.Messages {
 
     @Key("numberFormat")
-    @DefaultMessage("{0,number,###.#}")
+    @DefaultMessage("{0,number,##0.0#}")
     String numberFormater(float f);
 }

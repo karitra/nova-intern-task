@@ -1,7 +1,8 @@
 package com.hwbs.intertask.client.ui;
 
 import com.google.gwt.user.cellview.client.DataGrid;
-import com.google.gwt.user.client.ui.*;
+import com.google.gwt.user.client.ui.HeaderPanel;
+import com.google.gwt.user.client.ui.ScrollPanel;
 
 /**
  * User:      kaa
@@ -9,91 +10,40 @@ import com.google.gwt.user.client.ui.*;
  */
 public class LazyLoadDataGrid<T> extends DataGrid<T> {
 
-    NativeVerticalScrollbar scroll;
 
-    class NavigationScrollPanel extends CustomScrollPanel {
 
-        NavigationScrollPanel(Widget w) {
-            super(w);
-            //setCustomScrollBar(null);
-            removeVerticalScrollbar();
-        }
+    private boolean loadingPage = false;
+    private int basePageSize    = 0;
 
-    }
-    
     public ScrollPanel getScrollPanel() {
         HeaderPanel header = (HeaderPanel) getWidget();
         return (ScrollPanel) header.getContentWidget();
     }
 
-    //
-    // Reparent experements
-    //
-//    public void setCustomScrollBar(NativeVerticalScrollbar vb) {
-//        //if (true)
-//        //    return;
-//
-//        this.scroll = vb;
-//
-//        scroll.setScrollHeight(10000);
-//        scroll.addScrollHandler( new ScrollHandler() {
-//            @Override
-//            public void onScroll(ScrollEvent event) {
-//                GWT.log("new scroll: " + scroll.getVerticalScrollPosition());
-//            }
-//        });
-//
-//
-//        HeaderPanel body = (HeaderPanel) getWidget();
-//
-//        ScrollPanel sp = getScrollPanel();
-//        Widget dataPanel = sp.getWidget();
-//
-//        NavigationScrollPanel newPanel = new NavigationScrollPanel(dataPanel);
-//        body.setContentWidget(newPanel);
-//
-//        //body.add(content);
-//        //body.remove(sp);
-//
-////        ScrollPanel sp = getScrollPanel();
-////        Widget content = sp.getWidget();
-////        HeaderPanel body = (HeaderPanel) getWidget();
-////
-////        Widget c = body.getContentWidget();
-////        GWT.log("content: " + c);
-////        GWT.log("scrollp: " + sp);
-////
-////        NavigationScrollPanel newPanel = new NavigationScrollPanel(content);
-////
-////        sp.removeFromParent();
-////        GWT.log("content: " + body);
-////        body.add(newPanel);
-////        GWT.log("nconten: " + newPanel);
-////
-////        /*
-////         * CustomScrollPanel applies the inline block style to the container
-////         * element, but we want the container to fill the available width.
-////        */
-////        content.getElement().getParentElement().getStyle().setDisplay(com.google.gwt.dom.client.Style.Display.BLOCK);BLOCK
-//    }
+
+    public void setBasePageSize(int basePageSize) {
+        this.basePageSize = basePageSize;
+    }
+
+    public int getBasePageSize() {
+        return basePageSize;
+    }
 
 
-//    @Override
-//    public void redraw() {
-//        super.redraw();
-//        if (null != scroll) {
-//            int hdrHeight = getHdrHeight();
-//            int height = scroll.getNativeScrollbarHeight();
-//            int newHeight = height - hdrHeight;
-//            int tb = getTableHeadElement().getParentElement().getClientHeight();
-//
-//            GWT.log("scl height = " + height    );
-//            GWT.log("hdr height = " + hdrHeight );
-//            GWT.log("new height = " + newHeight );
-//            GWT.log("tb  height = " + tb );
-//
-//            //scroll.setHeight(newHeight + "px");
-//        }
-//
-//    }
+    /**
+     * Represents the state of table: is asynchronous loading in progress.
+     *
+     * Mostly needed by scroll bar to avoid redundancy requests overhead, when scroll is in data
+     * request poistion, but data already requested.
+     *
+     * @return
+     */
+    public boolean getLoadingPageState() {
+        return loadingPage;
+    }
+
+    public void setLoadingPageState(boolean loadingPage) {
+        this.loadingPage = loadingPage;
+    }
+
 }

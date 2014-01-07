@@ -3,17 +3,19 @@ package com.hwbs.intertask.client;
 import com.google.gwt.core.client.Duration;
 import com.google.gwt.core.client.GWT;
 import com.google.gwt.dom.client.Style;
+import com.google.gwt.dom.client.TableRowElement;
 import com.google.gwt.event.dom.client.ClickEvent;
 import com.google.gwt.event.dom.client.ScrollEvent;
 import com.google.gwt.event.dom.client.ScrollHandler;
 import com.google.gwt.event.logical.shared.SelectionEvent;
 import com.google.gwt.event.logical.shared.SelectionHandler;
+import com.google.gwt.event.shared.HandlerRegistration;
 import com.google.gwt.event.shared.SimpleEventBus;
 import com.google.gwt.uibinder.client.UiBinder;
 import com.google.gwt.uibinder.client.UiField;
 import com.google.gwt.uibinder.client.UiHandler;
 import com.google.gwt.user.cellview.client.ColumnSortEvent;
-import com.google.gwt.user.cellview.client.ColumnSortList;
+import com.google.gwt.user.cellview.client.HasKeyboardSelectionPolicy;
 import com.google.gwt.user.cellview.client.TextColumn;
 import com.google.gwt.user.client.Timer;
 import com.google.gwt.user.client.Window;
@@ -22,16 +24,17 @@ import com.google.gwt.user.client.ui.Button;
 import com.google.gwt.user.client.ui.LayoutPanel;
 import com.google.gwt.user.client.ui.ScrollPanel;
 import com.google.gwt.user.client.ui.TabLayoutPanel;
-import com.google.gwt.view.client.AsyncDataProvider;
-import com.google.gwt.view.client.HasData;
-import com.google.gwt.view.client.Range;
+import com.google.gwt.view.client.ProvidesKey;
+import com.google.gwt.view.client.SelectionModel;
 import com.google.web.bindery.requestfactory.shared.Receiver;
 import com.google.web.bindery.requestfactory.shared.Request;
+import com.google.web.bindery.requestfactory.shared.RequestFactory;
 import com.google.web.bindery.requestfactory.shared.ServerFailure;
+import com.hwbs.intertask.client.proxies.CacheStateProxy;
+import com.hwbs.intertask.client.proxies.NameRecordProxy;
+import com.hwbs.intertask.client.proxies.ViewParametersProxy;
 import com.hwbs.intertask.client.ui.LazyLoadDataGrid;
 import com.hwbs.intertask.shared.ProgressState;
-
-import java.util.List;
 
 //import java.text.MessageFormat;
 
@@ -41,13 +44,11 @@ import java.util.List;
  */
 public class TabbedView {
 
-    enum SortingMode {
-        Unordered,
-        SortByFirst,
-        SortByFirstDesc,
-        SortBySecond,
-        SortBySecondDesc
+    enum ColumnId {
+        FirstColumn,
+        SecondColumn
     }
+
 
     //interface TabbedViewUiBinder extends UiBinder<HTMLPanel, TabbedView> {}
     interface TabbedViewUiBinder extends UiBinder<LayoutPanel, TabbedView> {}
@@ -59,9 +60,13 @@ public class TabbedView {
 
     // Should be greater or near second in real app!
     private static final int DEFAULT_POLL_TIMEOUT_MS = 500;
-    private static final int CACHE_POLL_INTERVAL_MS  = 1000;
+    private static final int CACHE_POLL_INTERVAL_MS  = 250;
 
     private static final int DEFAULT_PAGE_SIZE = 20;
+
+    private static final int MARGIN_WIDGETS_COUNT = 2;
+    private static final int CELLS_TO_PRESERVE    = 2;
+
 
     //
     // RequestFuck^^^actory support
@@ -72,13 +77,7 @@ public class TabbedView {
         reqFac.initialize(eb);
     }
 
-
-
     // Logger logger = Logger.getLogger("dbg");
-    {
-        // TODO: disable logger
-    }
-
 
     /**
      * Create a remote service proxy to talk to the server-side Greeting service.
@@ -86,8 +85,7 @@ public class TabbedView {
     private final GreetingServiceAsync rpcService = GWT.create(GreetingService.class);
     private final RpcExecutorStub      rpcStub = new RpcExecutorStub(rpcService, false);
 
-    private AsyncDataProvider<NameRecordProxy> dataProvider;
-
+    private AsyncCachedDataProvider dataProvider;
 
     //
     // TODO: add localization to the project!
@@ -95,45 +93,51 @@ public class TabbedView {
     private final Messages messages     = GWT.create(Messages.class);
     private final ClientMessages numFmt = GWT.create(ClientMessages.class);
 
-    // @UiField CellTable<NameRecordProxy> namesTable;
     @UiField LazyLoadDataGrid<NameRecordProxy> namesGrid;
     @UiField Button            genBt;
     @UiField TabLayoutPanel tabPanel;
-    //@UiField ScrollPanel   scrollPanel;
-    //@UiField NativeVerticalScrollbar scroll;
-    //@UiField DataGrid<NameRecordProxy> namesGrid;
 
 
     //@UiField
     Button       genDummyBt;
 
-    //@UiField TabPanel tabPanel;
-
     Duration dura;
 
-    //private HTMLPanel root;
     private LayoutPanel root;
 
-    private int page_size = DEFAULT_PAGE_SIZE;
+    //
+    //  Chunks size for records. Preset on server and retrieved on application startup or 'Generate' button press
+    //
+    private int pageSize   = DEFAULT_PAGE_SIZE;
 
-    private static final int MARGIN_WIDGETS_COUNT = 3;
-    private static final int CELLS_TO_PRESERVE    = 2;
+    //
+    //  Remember 'cursor' placement in table of already loaded records
+    //
+    private int loadOffset          = 0;
+    private boolean lazyLoadEnabled = true;
+
+    private boolean loadingPage = false;
+
 
     enum ScrollMovingDirection {
-        Undefinded,
+        Undefined,
         Forward,
         Backward
     }
 
-    ScrollMovingDirection scrollDir = ScrollMovingDirection.Undefinded;
+
+    ScrollMovingDirection scrollDir = ScrollMovingDirection.Undefined;
 
     private int scrollPosDelta = 0;
     private int oldScrollPos   = 0;
 
-    private int cellHeight = 0;
+    private int cellHeight     = 0;
+
+    private boolean startScrollTransition = false;
 
 
     final TextColumn<NameRecordProxy> firstNameColumn = new TextColumn<NameRecordProxy>() {
+
         @Override
         public String getValue(NameRecordProxy object) {
             //GWT.log("my name is " + object.getFirstName());
@@ -143,6 +147,7 @@ public class TabbedView {
             return object.getFirstName();
         }
     };
+
 
     final TextColumn<NameRecordProxy> secondNameColumn = new TextColumn<NameRecordProxy>() {
         @Override
@@ -189,35 +194,25 @@ public class TabbedView {
         tabPanel.addSelectionHandler( new SelectionHandler<Integer>() {
             @Override
             public void onSelection(SelectionEvent<Integer> event) {
-                GWT.log("tab selected: " + event.getSelectedItem() );
+                // GWT.log("tab selected: " + event.getSelectedItem() );
                 namesGrid.redraw();
             }
         }) ;
+    }
+
+    public RequestFactory getRequestFactory() {
+        return reqFac;
     }
 
     public LayoutPanel getSelf() {
           return root;
     }
 
-    private SortingMode getSortingMode() {
-        SortingMode sm = SortingMode.Unordered;
-
-        ColumnSortList sortList = namesGrid.getColumnSortList();
-
-        if (sortList.size() > 0) {
-            if (sortList.get(0).getColumn() == firstNameColumn) {
-                sm = sortList.get(0).isAscending() ?
-                        SortingMode.SortByFirst :
-                        SortingMode.SortByFirstDesc;
-            } else if (sortList.get(0).getColumn() == secondNameColumn) {
-                sm = sortList.get(0).isAscending() ?
-                        SortingMode.SortBySecond :
-                        SortingMode.SortBySecondDesc;
-            }
-        }
-
-        return sm;
+    private void resetLoadedState() {
+        pageSize = loadOffset = 0;
+        namesGrid.setLoadingPageState(true);
     }
+
 
     //
     // Should be called from constructor only
@@ -227,69 +222,45 @@ public class TabbedView {
         firstNameColumn.setSortable(true);
         secondNameColumn.setSortable(true);
 
-        //namesTable.addColumn( firstNameColumn,  messages.tbHeaderFirstName()  );
-        //namesTable.addColumn( secondNameColumn, messages.tbHeaderSecondName() );
-
         namesGrid.addColumn( firstNameColumn,  messages.tbHeaderFirstName()  );
         namesGrid.addColumn(secondNameColumn, messages.tbHeaderSecondName()  );
 
-        //namesTable.setRowCount( 100, true );
-        //namesTable.setVisibleRange(0, 10);
-
-        //namesGrid.setVisibleRange(0, 1000000 );
-
-        // namesTable.setWidth("100%", true);
         namesGrid.setWidth("100%");
         namesGrid.setHeight("100%");
 
-        //namesTable.setColumnWidth(firstNameColumn,  50.0, Style.Unit.PCT );
-        //namesTable.setColumnWidth(secondNameColumn, 50.0, Style.Unit.PCT );
-
-        namesGrid.setColumnWidth(firstNameColumn, 50.0, Style.Unit.PCT);
+        namesGrid.setColumnWidth(firstNameColumn,  50.0, Style.Unit.PCT );
         namesGrid.setColumnWidth(secondNameColumn, 50.0, Style.Unit.PCT );
 
-        dataProvider = new AsyncDataProvider<NameRecordProxy>() {
-            @Override
-            protected void onRangeChanged(HasData<NameRecordProxy> display) {
-                final Range range = display.getVisibleRange();
+        namesGrid.setKeyboardSelectionPolicy(HasKeyboardSelectionPolicy.KeyboardSelectionPolicy.DISABLED);
 
-                GWT.log("range requested: " + range.getStart() + " ~ " + range.getLength() );
-
-
-                //final ColumnSortList sortList = namesTable.getColumnSortList();
-
-                SortingMode sm = getSortingMode();
-                GWT.log("sorting order: " + sm);
-
-
-                Request<List<NameRecordProxy>> request = RequesterFabrique.getRequest(sm,
-                        reqFac,
-                        range.getStart(), range.getLength() );
-
-                GWT.log("firing request");
-                request.fire( new Receiver<List<NameRecordProxy>>() {
-                    @Override
-                    public void onSuccess(List<NameRecordProxy> response) {
-                        GWT.log( "get data list of size " + response.size() );
-                        if (response.size() != 0) {
-                            updateRowData(range.getStart(), response);
-                        }
-
-                    }
-
-                    @Override
-                    public void onFailure(ServerFailure e) {
-                        GWT.log( "failed to get result: " + e.getMessage() );
-                    }
-                } );
-
-                //updateRowData(0, dataList);
-            }
-        };
+        dataProvider = new AsyncCachedDataProvider(namesGrid, reqFac);
 
         //dataProvider.addDataDisplay(namesTable);
         dataProvider.addDataDisplay(namesGrid);
 
+        //
+        // Add selection model which ingore user selection
+        // TODO: do something funcy in case user really want to select something
+        //
+        ProvidesKey<NameRecordProxy> pk = new ProvidesKey<NameRecordProxy>() {
+            @Override
+            public Object getKey(NameRecordProxy item) {
+                return item.getFirstName() + item.getSecondName();
+            }
+            };
+
+
+        namesGrid.setSelectionModel( new SelectionModel.AbstractSelectionModel<NameRecordProxy>(pk) {
+            @Override
+            public boolean isSelected(NameRecordProxy object) {
+                return false;
+            }
+
+            @Override
+            public void setSelected(NameRecordProxy object, boolean selected) {
+                // ingore...
+            }
+        });
 
         //
         // Staring out cache-ready poll
@@ -298,24 +269,46 @@ public class TabbedView {
             @Override
             public void run() {
                 DataModelRequest req = reqFac.dataModelRequest();
-                Request<Boolean> cacheReady = req.isMemStoreReady();
+                //Request<Boolean> cacheReady = req.isMemStoreReady();
+                Request<CacheStateProxy> cacheReady = req.getCacheState();
                 cacheReady.fire( new PollCacheReceiver(this) );
             }
         }.scheduleRepeating(CACHE_POLL_INTERVAL_MS);
 
 
-        //ColumnSortEvent.AsyncHandler colSortHandler = new ColumnSortEvent.AsyncHandler(namesTable);
-        //namesTable.addColumnSortHandler(colSortHandler);
 
-        ColumnSortEvent.AsyncHandler colSortGridHandler = new ColumnSortEvent.AsyncHandler(namesGrid);
-        namesGrid.addColumnSortHandler(colSortGridHandler);
+//        ColumnSortEvent.AsyncHandler colSortHandler = new ColumnSortEvent.AsyncHandler(namesGrid) {
+//            @Override
+//            public void onColumnSort(ColumnSortEvent event) {
+//                dataProvider.resetCache(pageSize, true);
+//
+//                super.onColumnSort(event);
+//
+//                //
+//                // Note: will fire second range  request on 'setPageSize',
+//                // by we can freely ignore one (any one of them),
+//                // as pageSize is now reset to original state.
+//                //
+//                namesGrid.setPageSize(pageSize);
+//
+//
+//                GWT.log( "Sorting event!" );
+//            }
+//        };
 
+        ColumnSortEvent.AsyncHandler colSortHandler = new ColumnSortEvent.AsyncHandler(namesGrid);
+        namesGrid.addColumnSortHandler(colSortHandler);
+
+        //
         // Setup scroll
+        //
         //namesGrid.setCustomScrollBar(scroll);
 
-        setupScrollExp1States();
+        //setupScrollExp1States();
+        setupScrollHandler();
     }
 
+    @Deprecated
     private void setupScrollOld2() {
 
         //p.addScrollHandler(
@@ -346,7 +339,7 @@ public class TabbedView {
                     if (scrollDir == ScrollMovingDirection.Backward)
                         sp.setVerticalScrollPosition(max - MARGIN_WIDGETS_COUNT * cellHeight);
 
-                    scrollDir = ScrollMovingDirection.Undefinded;
+                    scrollDir = ScrollMovingDirection.Undefined;
                     return;
                 }
 
@@ -356,7 +349,7 @@ public class TabbedView {
                 } else if (scrollPosDelta < 0) {
                     scrollDir = ScrollMovingDirection.Backward;
                 } else {
-                    scrollDir = ScrollMovingDirection.Undefinded;
+                    scrollDir = ScrollMovingDirection.Undefined;
                 }
 
                 GWT.log("scrollDir: " + scrollDir);
@@ -400,7 +393,75 @@ public class TabbedView {
 
     }
 
+    TableRowElement te = null;
+    int lastScrollPosition = 0;
 
+    private void setupScrollHandler() {
+        ScrollPanel p = namesGrid.getScrollPanel();
+        assert null != p;
+
+        HandlerRegistration handlerRegistration = p.addScrollHandler(new ScrollHandler() {
+            @Override
+            public void onScroll(ScrollEvent event) {
+
+                if (namesGrid.getLoadingPageState())
+                    return;
+
+                //
+                // Update row height
+                //
+                if (namesGrid.getVisibleItemCount() > 0) {
+                    cellHeight = namesGrid.getRowElement(0).getClientHeight();
+                    //GWT.log("cellHeight: " + cellHeight );
+                }
+
+                ScrollPanel sp = namesGrid.getScrollPanel();
+
+                int pos = sp.getVerticalScrollPosition();
+                int min = sp.getMinimumVerticalScrollPosition();
+                int max = sp.getMaximumVerticalScrollPosition();
+
+//                GWT.log("<-------");
+//                GWT.log("  scroll event: pos " + pos);
+//                GWT.log("  scroll event: min " + min);
+//                GWT.log("  scroll event: max " + max);
+
+                if (startScrollTransition) {
+                    startScrollTransition = false;
+
+                    GWT.log("  stop scrolling transition, last pos: " + lastScrollPosition);
+
+                    //
+                    // GWT bogus behaviour can move the scroll to the start of scroll panel
+                    // in that case and if we are after page update, move page to last known
+                    // good position
+                    //
+                    if (Math.abs(pos - lastScrollPosition) > cellHeight * (MARGIN_WIDGETS_COUNT + 2)) {
+                        GWT.log("  scroll delta: " + Math.abs(pos - lastScrollPosition));
+                        GWT.log("  setting scroll position: " + lastScrollPosition);
+                        sp.setVerticalScrollPosition(lastScrollPosition);
+                    }
+
+                    return;
+                }
+
+
+                if (pos > max - MARGIN_WIDGETS_COUNT * cellHeight + 2 /* pixels */) {
+                    GWT.log("  scroll event: pageSize " + pageSize);
+
+                    namesGrid.setLoadingPageState(true);
+                    namesGrid.setPageSize(namesGrid.getPageSize() + pageSize);
+
+                    startScrollTransition = true;
+                    lastScrollPosition = sp.getMaximumVerticalScrollPosition() - MARGIN_WIDGETS_COUNT * cellHeight;
+                }
+
+
+            }
+        });
+    }
+
+    @Deprecated
     private void setupScrollExp1States() {
         ScrollPanel p = namesGrid.getScrollPanel();
         assert null != p;
@@ -421,7 +482,7 @@ public class TabbedView {
                 // update direction delta
                 scrollPosDelta = pos - oldScrollPos;
                 oldScrollPos = pos;
-                GWT.log("<-------");
+                GWT.log("<----!!!!---");
                 GWT.log("  scroll event: pos " + pos);
                 GWT.log("  scroll event: min " + min);
                 GWT.log("  scroll event: max " + max);
@@ -432,7 +493,7 @@ public class TabbedView {
                 } else if (scrollPosDelta < 0) {
                     scrollDir = ScrollMovingDirection.Backward;
                 } else {
-                    scrollDir = ScrollMovingDirection.Undefinded;
+                    scrollDir = ScrollMovingDirection.Undefined;
                 }
 
                 //
@@ -501,7 +562,7 @@ public class TabbedView {
 //                            return;
 //                        }
 
-                        GWT.log("updating scroll to pos: " + (max - cellHeight * MARGIN_WIDGETS_COUNT - 2) );
+                        GWT.log( "updating scroll to pos: " + (max - cellHeight * MARGIN_WIDGETS_COUNT - 2) );
                         sp.setVerticalScrollPosition(max - cellHeight * MARGIN_WIDGETS_COUNT - 2);
                         scrollState = ScrollingState.Init;
                         break;
@@ -519,23 +580,15 @@ public class TabbedView {
 
         setGenBtRunning();
 
-        GWT.log("Pressing button");
         //rpcService.generate(new GenerateCallback<Boolean>());
+
         rpcStub.setDummyMode(false);
         rpcStub.generate();
-        GWT.log("Done: pressing button!");
 
-        dataProvider.updateRowCount(0, true);
+        //dataProvider.updateRowCount(0, true);
+        resetLoadedState();
 
-        new Timer() {
-            @Override
-            public void run() {
-                scrollProcessingDisabled = true;
-                DataModelRequest req = reqFac.dataModelRequest();
-                Request<Boolean> cacheReady = req.isMemStoreReady();
-                cacheReady.fire( new PollCacheReceiver(this) );
-            }
-        }.scheduleRepeating(CACHE_POLL_INTERVAL_MS);
+        lazyLoadEnabled = false;
     }
 
     //@UiHandler("genDummyBt")
@@ -545,7 +598,7 @@ public class TabbedView {
 
         setGenBtRunning();
 
-        GWT.log("Pressing dummy button");
+        //GWT.log("Pressing dummy button");
         rpcStub.setDummyMode(true);
         rpcStub.generate();
         //rpcService.generateDummy(new GenerateCallback<Boolean>());
@@ -611,34 +664,42 @@ public class TabbedView {
         public void onSuccess(T r) {
             //Window.alert("Poll: is done " + r.isDone());
             if (r.isDone()) {
+
                 GWT.log("time taken: " + dura.elapsedMillis() + "ms");
-                // logger.log(Level.INFO, "time taken: " + dura.elapsedMillis() + "ms");
+
                 self_timer.cancel();
                 setGenBtDefault();
 
-                reqFac.dataModelRequest().getRecordsUnordered(0, page_size).fire(
-                        new Receiver<List<NameRecordProxy>>() {
-                            @Override
-                            public void onSuccess(List<NameRecordProxy> data) {
-                                dataProvider.updateRowData(0, data);
+                new Timer() {
+                    @Override
+                    public void run() {
+                        scrollProcessingDisabled = true;
+                        DataModelRequest req = reqFac.dataModelRequest();
 
-                                //if (scrollDir == ScrollMovingDirection.Forward) {
-                                //    namesGrid.getScrollPanel().setVerticalScrollPosition(3 * cellHeight);
-                                //}
-                        }
+                        //Request<Boolean> cacheReady = req.isMemStoreReady();
+                        Request<CacheStateProxy> cacheReady = req.getCacheState();
+                        cacheReady.fire( new PollCacheReceiver(this) );
+                    }
+                }.scheduleRepeating(CACHE_POLL_INTERVAL_MS);
 
-                        @Override
-                            public void onFailure(ServerFailure e) {
-                            GWT.log("failed to get new data: " + e.getMessage());
-                        }
-                });
+//                reqFac.dataModelRequest().getRecordsUnordered(0, pageSize).fire(
+//                        new Receiver<List<NameRecordProxy>>() {
+//                            @Override
+//                            public void onSuccess(List<NameRecordProxy> data) {
+//                                resetLoadedState();
+//                                dataProvider.updateRowData( 0, data);
+//                                lazyLoadEnabled = true;
+//                        }
+//
+//                        @Override
+//                            public void onFailure(ServerFailure e) {
+//                            GWT.log("failed to get new data: " + e.getMessage());
+//                        }
+//                });
 
-
-                //Window.alert("Poll: is done?" + r.isDone());
-                // TODO: load cached pages for names load view
             } else {
                 GWT.log("result not yet ready: " + r.getPercents());
-                // logger.log(Level.INFO, "percents: " + r.getPercents());
+
                 setGenBtRunning(r.getPercents());
             }
         }
@@ -662,19 +723,21 @@ public class TabbedView {
             //Window.alert("Success: " + result);
 
             if (result.equals(java.lang.Boolean.TRUE)) {
-                 final Timer t = new Timer() {
+                // Start the polling for completion results
+
+                // to force page reload
+                namesGrid.setPageSize(0);
+                namesGrid.getScrollPanel().setVerticalScrollPosition(0);
+
+                new Timer() {
                     @Override
                     public void run() {
-                        GWT.log("check-progress...");
-                        //rpcService.progress(new PollCallback<ProgressState>(this) );
-                        //rpcService.progressDummy( new PollCallback<ProgressState>(this) );
-                        rpcStub.progress(this);
-                        GWT.log("check-progress called, waiting for result...");
+                        DataModelRequest req = reqFac.dataModelRequest();
+                        //Request<java.lang.Boolean> cacheReady = req.isMemStoreReady();
+                        Request<CacheStateProxy> cacheReady = req.getCacheState();
+                        cacheReady.fire( new PollCacheReceiver(this) );
                     }
-                 };
-
-                // Start the polling for completion results
-                t.scheduleRepeating(DEFAULT_POLL_TIMEOUT_MS);
+                }.scheduleRepeating(CACHE_POLL_INTERVAL_MS);
 
             } else {
                 // 'Execute' call processed successfully, but returns false
@@ -686,44 +749,72 @@ public class TabbedView {
         }
     }
 
-    private class PollCacheReceiver extends Receiver<Boolean> {
+    private class PollCacheReceiver extends Receiver<CacheStateProxy> {
 
-        final Timer t;
+        private final Timer t;
 
         PollCacheReceiver(Timer t) {
             this.t = t;
         }
 
         @Override
-        public void onSuccess(Boolean response) {
-            if (response.booleanValue()) {
+        public void onSuccess(CacheStateProxy response) {
 
-                // cache is ready
+            if (response.isLoading()) {
+                return;
+            } else if (!response.isValid()) {
                 t.cancel();
 
+                setGenBtDefault();
+                return;
+            }
+
+            //
+            // Following check doesn't needed now, but is here as reminder in case the application startup flow
+            // changes
+            //
+            if (response.isValid()) {
+
+                //
+                // cache is ready, stop polling
+                //
+                t.cancel();
+
+                //
+                //  Request backend view parameters
+                //
                 DataModelRequest req = reqFac.dataModelRequest();
                 req.getViewParameters().fire(new Receiver<ViewParametersProxy>() {
                     @Override
                     public void onSuccess(ViewParametersProxy response) {
-                        page_size = response.getPageSize();
 
-                        //namesGrid.setPageSize(page_size + MARGIN_WIDGETS_COUNT * 2);
-                        namesGrid.setPageSize(page_size);
-                        GWT.log("page_size: " + page_size);
+                        // resetLoadedState();
 
+                        pageSize  = response.getPageSize();
                         int items = response.getTotalItems();
 
-                        scrollProcessingDisabled = false;
+                        GWT.log("pageSize: " + pageSize);
+                        GWT.log("items:    " + items + " in database");
 
+                        //namesGrid.setRowCount(items, true);
+                        dataProvider.resetCache(pageSize);
+
+                        namesGrid.setBasePageSize(pageSize);
+
+                        namesGrid.setPageSize(pageSize);
                         namesGrid.setRowCount(items, true);
-                        dataProvider.updateRowCount(items, true);
-                        GWT.log("items: " + items + " of requested data");
+
+                        //dataProvider.updateRowCount( items, true);
+                        setGenBtDefault();
                     }
                 });
 
             } else {
-                GWT.log("Cache not ready yet [" + response +  "]" );
-                // not ready continue polling
+                //
+                // not ready, continue polling
+                //
+                GWT.log( "Cache not ready yet: " + response.getTimeRegenerating() +  " ms passed" );
+                // setGenBtRunning( response.getTimeRegenerating() / 1000.0f );
             }
         }
 
@@ -733,22 +824,6 @@ public class TabbedView {
         }
     }
 
-    private static class RequesterFabrique {
-
-         private static Request<List<NameRecordProxy>> getRequest(SortingMode m, NamesServiceRequestFactory factory, int from, int len) {
-            DataModelRequest req = factory.dataModelRequest();
-            switch (m) {
-                case Unordered:        return req.getRecordsUnordered(from, len);
-                case SortByFirst:      return req.getRecords1stOrdered(from, len);
-                case SortByFirstDesc:  return req.getRecords1stOrderedDesc(from,len);
-                case SortBySecond:     return req.getRecords2ndOrdered(from, len);
-                case SortBySecondDesc: return req.getRecords2ndOrderedDesc(from,len);
-            }
-
-            return req.getRecordsUnordered(from, len);
-        }
-
-    }
 
 
     private void setGenBtRunning() {
@@ -756,7 +831,8 @@ public class TabbedView {
     }
 
     private void setGenBtRunning(float f) {
-        genBt.setText(messages.generating(numFmt.numberFormater(f)));
+
+        genBt.setText( messages.generating( numFmt.numberFormater(f) ) );
         genBt.setEnabled(false);
     }
 

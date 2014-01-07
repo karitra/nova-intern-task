@@ -6,14 +6,16 @@ package com.hwbs.intertask.shared;
  */
 public class ViewParameters {
     private int items_cnt, page_size;
+    //private boolean isCacheValid;
 
     public ViewParameters() {
 
     }
 
     public ViewParameters(int items, int page) {
-        this.items_cnt = items;
-        this.page_size = page;
+        this.items_cnt    = items;
+        this.page_size    = page;
+        //this.isCacheValid = isValid;
     }
 
     public int getPageSize() {
@@ -23,4 +25,5 @@ public class ViewParameters {
     public int getTotalItems() {
         return items_cnt;
     }
+
 }

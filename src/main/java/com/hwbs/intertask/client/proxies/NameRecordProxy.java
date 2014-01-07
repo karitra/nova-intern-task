@@ -1,4 +1,4 @@
-package com.hwbs.intertask.client;
+package com.hwbs.intertask.client.proxies;
 
 import com.google.web.bindery.requestfactory.shared.ProxyFor;
 import com.google.web.bindery.requestfactory.shared.ValueProxy;

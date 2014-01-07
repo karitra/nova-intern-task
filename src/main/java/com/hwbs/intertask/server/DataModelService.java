@@ -1,5 +1,7 @@
 package com.hwbs.intertask.server;
 
+import com.hwbs.intertask.shared.CacheState;
+import com.hwbs.intertask.shared.CommonConfig;
 import com.hwbs.intertask.shared.NameRecord;
 import com.hwbs.intertask.shared.ViewParameters;
 
@@ -34,6 +36,27 @@ public class DataModelService {
         return DataModel.getInstance().getRecords2ndOrderedDesc(from, num);
     }
 
+
+    public static List<NameRecord> getRecordsUnordered(int pageNum) {
+        return DataModel.getInstance().getRecordsUnordered(pageNum);
+    }
+
+    public static List<NameRecord> getRecords1stOrdered(int pageNum) {
+        return DataModel.getInstance().getRecords1stOrdered(pageNum);
+    }
+
+    public static List<NameRecord> getRecords2ndOrdered(int pageNum) {
+        return DataModel.getInstance().getRecords2ndOrdered(pageNum);
+    }
+
+    public static List<NameRecord> getRecords1stOrderedDesc(int pageNum) {
+        return DataModel.getInstance().getRecords1stOrderedDesc(pageNum);
+    }
+
+    public static List<NameRecord> getRecords2ndOrderedDesc(int pageNum) {
+        return DataModel.getInstance().getRecords2ndOrderedDesc(pageNum);
+    }
+
     public static Boolean isMemStoreReady() {
         return DataModel.getInstance().isMemStoreReady();
     }
@@ -43,7 +66,7 @@ public class DataModelService {
     }
 
     public static long getPageSize() {
-        return DataModel.PAGE_SIZE_LIMIT;
+        return CommonConfig.PAGE_SIZE_LIMIT;
     }
 
     public static long getItemsCount() {
@@ -53,6 +76,11 @@ public class DataModelService {
     public static ViewParameters getViewParameters() {
         return DataModel.getInstance().getViewParameters();
     }
+
+    public static CacheState getCacheState() {
+        return DataModel.getInstance().getCacheState();
+    }
+
 
     //
     //  Note: for test and debug, can remove in production

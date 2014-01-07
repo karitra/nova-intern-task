@@ -119,7 +119,7 @@ public class SimpleExecutor implements Runnable {
         if (running)
             return false;
 
-        putCmd(Command.Execute);
+        putCmd( Command.Execute);
         return true;
     }
 
@@ -127,7 +127,7 @@ public class SimpleExecutor implements Runnable {
         try {
 
             for(int retries = 0;
-                !msgQueue.offer(Command.Execute, 100, TimeUnit.MILLISECONDS) && retries < SUBMIT_RETRIES_NUM;
+                !msgQueue.offer( Command.Execute, 100, TimeUnit.MILLISECONDS ) && retries < SUBMIT_RETRIES_NUM;
                 retries++);
 
         } catch(InterruptedException e) {

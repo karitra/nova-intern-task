@@ -3,6 +3,9 @@ package com.hwbs.intertask.client;
 import com.google.web.bindery.requestfactory.shared.Request;
 import com.google.web.bindery.requestfactory.shared.RequestContext;
 import com.google.web.bindery.requestfactory.shared.Service;
+import com.hwbs.intertask.client.proxies.CacheStateProxy;
+import com.hwbs.intertask.client.proxies.NameRecordProxy;
+import com.hwbs.intertask.client.proxies.ViewParametersProxy;
 import com.hwbs.intertask.server.DataModelService;
 
 import java.util.List;
@@ -20,10 +23,20 @@ public interface DataModelRequest extends RequestContext {
     Request<List<NameRecordProxy>> getRecords1stOrderedDesc(int from, int num);
     Request<List<NameRecordProxy>> getRecords2ndOrderedDesc(int from, int num);
 
+    Request<List<NameRecordProxy>> getRecordsUnordered(int pagNum);
+    Request<List<NameRecordProxy>> getRecords1stOrdered(int pagNum);
+    Request<List<NameRecordProxy>> getRecords2ndOrdered(int pagNum);
+    Request<List<NameRecordProxy>> getRecords1stOrderedDesc(int pagNum);
+    Request<List<NameRecordProxy>> getRecords2ndOrderedDesc(int pagNum);
+
     Request<ViewParametersProxy>   getViewParameters();
 
+    //
     // Should be marked as deprecated, remove in future version
-    Request<Boolean> isMemStoreReady();
+    //
+    Request<Boolean>         isMemStoreReady();
+    Request<CacheStateProxy>   getCacheState();
+
     Request<Boolean> isPrefetchedStoreReady();
 
     Request<Long> getPageSize();

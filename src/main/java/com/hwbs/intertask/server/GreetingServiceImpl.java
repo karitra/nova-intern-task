@@ -8,6 +8,7 @@ import com.hwbs.intertask.server.generator.mt.Executor;
 import com.hwbs.intertask.server.generator.mt.FillDBTasksFactory;
 import com.hwbs.intertask.server.generator.mt.NamesGenExecutor;
 import com.hwbs.intertask.server.messages.ProcessMessage;
+import com.hwbs.intertask.shared.CommonConfig;
 import com.hwbs.intertask.shared.Feedback;
 import com.hwbs.intertask.shared.NameRecord;
 import com.hwbs.intertask.shared.ProgressState;
@@ -20,7 +21,6 @@ import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.Arrays;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -62,14 +62,6 @@ public class GreetingServiceImpl extends RemoteServiceServlet implements
     }
 
 
-
-    /*
-    private NameRecord[] cacheOrderedBy1st;
-    private NameRecord[] cacheOrderedBy2nd;
-    private NameRecord[] cacheOrderedBy1stDesc;
-    private NameRecord[] cacheOrderedBy2ndDesc;
-    */
-
     DataModel model;
 
     //
@@ -86,31 +78,6 @@ public class GreetingServiceImpl extends RemoteServiceServlet implements
     // Name not truly represent the entity, as it can wait for other types on tasks
     private AsyncTasksSentry sortingDoneSentry = new AsyncTasksSentry();
 
-    //
-    // TODO: remove this garbage
-    //
-    /*
-  @Deprecated
-  public String greetServer(String input) throws IllegalArgumentException {
-    // Verify that the input is valid.
-    if (!FieldVerifier.isValidName(input)) {
-      // If the input is not valid, throw an IllegalArgumentException back to
-      // the client.
-      throw new IllegalArgumentException(
-          "Name must be at least 4 characters long");
-    }
-
-    String serverInfo = getServletContext().getServerInfo();
-    String userAgent = getThreadLocalRequest().getHeader("User-Agent");
-
-    // Escape data from the client to avoid cross-site script vulnerabilities.
-    input = escapeHtml(input);
-    userAgent = escapeHtml(userAgent);
-
-    return "Hello, " + input + "!<br><br>I am running " + serverInfo
-        + ".<br><br>It looks like you are using:<br>" + userAgent;
-  }
-  */
 
     @Override
     public void init(ServletConfig config) throws ServletException {
@@ -119,13 +86,9 @@ public class GreetingServiceImpl extends RemoteServiceServlet implements
         int cores = Runtime.getRuntime().availableProcessors();
         pion = Executors.newFixedThreadPool(cores * 2);
 
-        model = DataModel.getInstance();
+        model  = DataModel.getInstance();
 
         logger = Logger.getLogger("nviewer");
-
-        //NamesGenExecutor namesGenerator = new NamesGenExecutor();
-        //GenTask genTask = new GenTask(namesGenerator);
-        //GenTask genTask = new GenTask();
 
         genWrk    = new SimpleExecutor( new GenTask(getCache()) );
         genThread = new Thread(genWrk);
@@ -140,8 +103,6 @@ public class GreetingServiceImpl extends RemoteServiceServlet implements
         }
 
         String dbpath = path + DB_PATH;
-
-        // System.err.println("DB path: " + dbpath);
 
         logger.log(Level.INFO, "database path: " + dbpath);
 
@@ -162,7 +123,7 @@ public class GreetingServiceImpl extends RemoteServiceServlet implements
 
         try {
             //
-            // TODO: Make halt logic clear (incapsulate in one transaction)
+            // TODO: Make halt logic clear ('pack' in one transaction)
             //
             genWrk.halt();
             genThread.join(WAITE_TO_SHUTDOWN_MS);
@@ -237,7 +198,7 @@ public class GreetingServiceImpl extends RemoteServiceServlet implements
                     DataModel.getInstance().invalidateAllCaches();
 
                     Statement stmt = conn.createStatement();
-                    ResultSet res = stmt.executeQuery("select count(*) from names");
+                    ResultSet res  = stmt.executeQuery("select count(*) from names");
                     int count = 0;
                     if (null != res && res.next()) {
                         count = res.getInt(1);
@@ -249,16 +210,17 @@ public class GreetingServiceImpl extends RemoteServiceServlet implements
                     if (count == 0) {
                         // no records yet, done
                         logger.log(Level.WARNING, "database is empty, should we force generate?");
+                        model.setLoadingState(false);
                         return;
                     }
 
                     String query = "select first_name, second_name from names";
-                    if (count > DataModel.TOTAL_RECORDS) {
-                        query += "limit " + DataModel.TOTAL_RECORDS;
+                    if (count > CommonConfig.TOTAL_RECORDS) {
+                        query += "limit " + CommonConfig.TOTAL_RECORDS;
                     }
 
                     stmt = conn.createStatement();
-                    res = stmt.executeQuery(query);
+                    res  = stmt.executeQuery(query);
 
                     int i = 0;
                     while (res.next() && !shouldHaltDBLoad) {
@@ -283,11 +245,11 @@ public class GreetingServiceImpl extends RemoteServiceServlet implements
                     }
 
                     // Complete database init
-                    if (i < DataModel.TOTAL_RECORDS) {
+                    if (i < CommonConfig.TOTAL_RECORDS) {
 
-                        logger.log(Level.WARNING, "database isn't full, fill some records");
+                        logger.log(Level.WARNING, "database isn't full, filling records with existing one");
 
-                        for (int j = i; j < DataModel.TOTAL_RECORDS && !shouldHaltDBLoad; ++j) {
+                        for (int j = i; j < CommonConfig.TOTAL_RECORDS && !shouldHaltDBLoad; ++j) {
                             dbRecs[j] = new NameRecord(res.getString(1), res.getString(2));
                         }
                     }
@@ -301,18 +263,23 @@ public class GreetingServiceImpl extends RemoteServiceServlet implements
                     //
                     startSorting(dbRecs);
 
-
                     //
-                    // DEBUG: completion hook,  remove it!
+                    // Wait for sorting completion to inform clients
                     //
                     new Thread( new Runnable() {
                         @Override
                         public void run() {
                             sortingDoneSentry.waitAll();
+
+                            if (null != model)
+                                model.setLoadingState(false);
+
+//                            dumpHead(DataModel.getInstance().getUnordered(), 8);
+
                             logger.log(Level.WARNING, "database loading and sorting took: " +
                                     (System.nanoTime() - start) / 1000000 + "ms");
-                            System.err.println( "database loading and sorting took: " +
-                                    (System.nanoTime() - start) / 1000000  + "ms");
+//                            System.err.println( "database loading and sorting took: " +
+//                                    (System.nanoTime() - start) / 1000000  + "ms");
 
                         }
                     }).start();
@@ -322,6 +289,7 @@ public class GreetingServiceImpl extends RemoteServiceServlet implements
                 } finally {
 
                     shouldHaltDBLoad = false;
+
 
                     if (null != conn) {
 
@@ -366,10 +334,10 @@ public class GreetingServiceImpl extends RemoteServiceServlet implements
     }
 
 
-    private NameRecord[] fillCacheSingle() {
+    public static NameRecord[] fillCacheSingle() {
 
-        NameRecord[] csh = new NameRecord[DataModel.TOTAL_RECORDS];
-        for(int i = 0; i < DataModel.TOTAL_RECORDS; ++i) {
+        NameRecord[] csh = new NameRecord[CommonConfig.TOTAL_RECORDS];
+        for(int i = 0; i < CommonConfig.TOTAL_RECORDS; ++i) {
             csh[i] = new NameRecord();
         }
 
@@ -438,7 +406,7 @@ public class GreetingServiceImpl extends RemoteServiceServlet implements
             //
             // Creating single threaded Executor
             //
-            this.gen = new Executor(NamesGenExecutor.NAMES_COUNT, NamesGenExecutor.NAMES_COUNT, true);
+            this.gen = new Executor( NamesGenExecutor.NAMES_COUNT, NamesGenExecutor.NAMES_COUNT, true);
         }
 
         @Override
@@ -453,7 +421,7 @@ public class GreetingServiceImpl extends RemoteServiceServlet implements
             if (null != fac) {
                 fac.cancelAll();
                 if (null != result) {
-                    logger.log(Level.INFO, "waiting for completion of previous step");
+                    logger.log( Level.INFO, "waiting for completion of previous step");
                     result.waitAll();
                 }
             }
@@ -461,24 +429,23 @@ public class GreetingServiceImpl extends RemoteServiceServlet implements
             //
             // Clear out database
             //
-            // Note: we are single threaded here. so it should be ok not to synchronize here
+            // Note: we are single threaded here. so it should be ok not to synchronize
             //
             //deleteDBCache();
             recreateDBCache();
 
             //
-            // Sanity check: cache not ready yet by some reason, erronrecreateDBeous state, just boiling out
+            // Sanity check: cache not ready yet by some reason, errorOncreateDB state, just boiling out
             //
             if (getCache() == null)
                 return;
 
-            fac = new FillDBTasksFactory(connector, getCache() );
-            TaskResult tr = new TaskResult(gen.expectedSubTasksNum());
+            fac = new FillDBTasksFactory(  connector, getCache() );
+            TaskResult tr = new TaskResult( gen.expectedSubTasksNum());
             gen.generate(fac, tr);
             tr.waitAll();
 
-            logger.log(Level.WARNING, "massive parallel data insertion done: " + (System.nanoTime() - start) / 1000000.0 + " ms");
-
+            logger.log(Level.WARNING, "massive parallel data insertion done: " + (System.nanoTime() - start) / 1000000.0f + " ms");
             // at this point all records must be inserted!
         }
 
@@ -506,7 +473,9 @@ public class GreetingServiceImpl extends RemoteServiceServlet implements
             @Override
             public void run() {
                 NameRecord[] cacheOrderedBy1st = csh.clone();
-                Arrays.sort(cacheOrderedBy1st, new NameRecord.FirstNameComparator());
+                //Arrays.sort(cacheOrderedBy1st, new NameRecord.FirstNameComparator());
+                //HybridSorting.sortByFirstNameMixed(cacheOrderedBy1st);
+                HybridSorting.sortRadix1StNameMSDSA(cacheOrderedBy1st);
                 DataModel.getInstance().setOrderedBy1stModel( cacheOrderedBy1st );
                 logger.log(Level.WARNING, "sort done [by 1st name]");
             }
@@ -516,11 +485,15 @@ public class GreetingServiceImpl extends RemoteServiceServlet implements
             @Override
             public void run() {
                 NameRecord[] cacheOrderedBy2nd = csh.clone();
-                Arrays.sort(cacheOrderedBy2nd, new NameRecord.SecondNameComparator() );
+                //Arrays.sort(cacheOrderedBy2nd, new NameRecord.SecondNameComparator() );
+                //HybridSorting.sortBySecondNameMixed(cacheOrderedBy2nd);
+                HybridSorting.sortRadix2ndNameMSDSA(cacheOrderedBy2nd);
                 DataModel.getInstance().setOrderedBy2ndModel(cacheOrderedBy2nd);
                 logger.log(Level.WARNING, "sort done [by 2nd name]");
             }
         });
+
+        /* Not used as now we just mirror the results of the ascending sorting
 
         Future<?> sortRes1Desc = pion.submit( new Runnable() {
             @Override
@@ -541,12 +514,14 @@ public class GreetingServiceImpl extends RemoteServiceServlet implements
                 logger.log(Level.WARNING, "sort done [by 2nd name desc]");
             }
         });
+        */
 
 
         sortingDoneSentry.add(sortRes1);
         sortingDoneSentry.add(sortRes2);
-        sortingDoneSentry.add(sortRes1Desc);
-        sortingDoneSentry.add(sortRes2Desc);
+
+        //sortingDoneSentry.add(sortRes1Desc);
+        //sortingDoneSentry.add(sortRes2Desc);
     }
 
 
@@ -589,6 +564,9 @@ public class GreetingServiceImpl extends RemoteServiceServlet implements
 
             Runtime.getRuntime().gc();
 
+            //
+            // Post db writing command
+            //
             dbWrk.postCommand( new ProcessMessage(csh) );
 
             logger.log(Level.WARNING, "ignite sorting");
@@ -605,6 +583,9 @@ public class GreetingServiceImpl extends RemoteServiceServlet implements
                     logger.log(Level.WARNING, "Sorting done, in (approximitly): " +
                             (System.nanoTime() - q) / 1000000 + "ms" );
                     Runtime.getRuntime().gc();
+
+                    // dumpHead(DataModel.getInstance().getUnordered(), 128 );
+
                 }
             } ).start();
 
@@ -631,11 +612,6 @@ public class GreetingServiceImpl extends RemoteServiceServlet implements
 
         }
 
-        public void dumpHead(NameRecord[] c,int lim) {
-            for(int i = 0; i < lim; i++) {
-                System.out.printf("[%3d] name: %s\n", i, c[i]);
-            }
-        }
 
         public void dummyWait(long seconds) {
             try {
@@ -645,6 +621,28 @@ public class GreetingServiceImpl extends RemoteServiceServlet implements
             }
         }
 
+    }
+
+    public static void dumpHead(NameRecord[] c,int lim) {
+        if (lim > c.length)
+            lim = c.length;
+
+        System.out.println("<--- Head ----");
+        for(int i = 0; i < lim; i++) {
+            System.out.printf("[%3d] name: %s\n", i, c[i]);
+        }
+    }
+
+    public static void dumpTail(NameRecord[] c, int lim) {
+        if (lim > c.length)
+            lim = c.length;
+
+        int offset = c.length - lim;
+
+        System.out.println("<--- Tail ----");
+        for(int i = offset; i < c.length ;++i) {
+            System.out.printf( "[%3d] name: %s\n", i, c[i] );
+        }
     }
 
 
@@ -664,10 +662,7 @@ public class GreetingServiceImpl extends RemoteServiceServlet implements
             Thread.sleep( 4 * 1000);
         } catch (InterruptedException e) {
             e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
-        } finally {
-
         }
-
         return true;
     }
 

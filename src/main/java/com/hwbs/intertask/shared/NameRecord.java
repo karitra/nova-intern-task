@@ -52,11 +52,11 @@ public class NameRecord {
         return id;
     }
 
-    public char[] firstName() {
+    public final char[] firstName() {
         return first;
     }
 
-    public char[] secondName() {
+    public final char[] secondName() {
         return second;
     }
 
@@ -79,13 +79,10 @@ public class NameRecord {
 
     public String toString() {
         StringBuilder sb = new StringBuilder(MAX_CHARS_IN_NAME * 2 + 1);
-        sb.append(first, 0, firstEnd);
-        //sb.append(first);
-        sb.append(' ');
-        sb.append(second, 0, secondEnd);
-        //sb.append(second);
 
-        return sb.toString();
+        return sb.append(first, 0, firstEnd)
+            .append(' ')
+            .append(second, 0, secondEnd).toString();
     }
 
     public void setFirst(String name) {
@@ -139,11 +136,74 @@ public class NameRecord {
     }
 
 
+    /**
+     * For counting sorting. Field adapter
+     *
+     */
+    public interface FieldGetter<T extends NameRecord> {
+         Comparator<T> getComparator();
+         char[] get(NameRecord a);
+    }
+
+    public static class FirstNameGetter<T extends NameRecord> implements FieldGetter<T> {
+
+        Comparator<T> cmp;
+
+        public FirstNameGetter() {
+            this(0);
+        }
+
+
+        public FirstNameGetter(int offset) {
+            cmp = new FirstNameComparator<T>(offset);
+        }
+
+        @Override
+        public final Comparator<T> getComparator() {
+            return cmp;
+        }
+
+        @Override
+        public final char[] get(NameRecord a) {
+            return a.firstName();
+        }
+    }
+
+    public static class SecondNameGetter<T extends NameRecord> implements FieldGetter<T> {
+
+        Comparator<T> cmp;
+
+        public SecondNameGetter() {
+            this(0);
+        }
+
+        public SecondNameGetter(int offset) {
+            cmp = new SecondNameComparator<T>(offset);
+        }
+
+
+        @Override
+        public final Comparator<T> getComparator() {
+            return cmp;
+        }
+
+
+        public final char[] get(NameRecord a) {
+            return a.secondName();
+        }
+    }
+
+
     private static class BasicComparator {
 
         protected char[] a,b;
         protected int alen, blen, i, min;
         protected boolean altb, agtb;
+        protected int offset;
+
+        BasicComparator(int offset) {
+            this.offset = offset;
+        }
 
         protected int cmpAsc() {
 
@@ -155,7 +215,7 @@ public class NameRecord {
                 altb = false;
             }
 
-            for(i = 0; i < min; ++i) {
+            for(i = offset; i < min; ++i) {
                 if (a[i] < b[i]) {
                     return -1;
                 } else if (a[i] > b[i]) {
@@ -181,7 +241,7 @@ public class NameRecord {
                 agtb = true;
             }
 
-            for(i = 0; i < min; ++i) {
+            for(i = offset; i < min; ++i) {
                 if (a[i] > b[i]) {
                     return -1;
                 } else if (a[i] < b[i]) {
@@ -206,10 +266,19 @@ public class NameRecord {
     // Note: following two comparator should be not used as static fields, as they are stateful
     // and therefor not thread safe
     //
-    public static class FirstNameComparator extends BasicComparator implements  Comparator<NameRecord> {
+    public static class FirstNameComparator<T extends NameRecord> extends BasicComparator implements  Comparator<T> {
+
+        public FirstNameComparator() {
+            super(0);
+        }
+
+        public FirstNameComparator(int offset) {
+            super(offset);
+        }
+
 
         @Override
-        public int compare(NameRecord o1, NameRecord o2) {
+        public int compare(T o1, T o2) {
             a    = o1.firstName();
             alen = o1.getFirstEnd();
 
@@ -220,7 +289,16 @@ public class NameRecord {
         }
     }
 
-    public static class SecondNameComparator extends BasicComparator implements Comparator<NameRecord> {
+    public static class SecondNameComparator<T extends NameRecord> extends BasicComparator implements Comparator<T> {
+
+        public SecondNameComparator() {
+            super(0);
+        }
+
+        public SecondNameComparator(int offset) {
+            super(offset);
+        }
+
 
         @Override
         public int compare(NameRecord o1, NameRecord o2) {
@@ -234,6 +312,7 @@ public class NameRecord {
         }
     }
 
+    /*
     public static class SecondNameComparatorDesc extends SecondNameComparator {
         @Override
         protected int cmp() {
@@ -246,7 +325,9 @@ public class NameRecord {
         protected int cmp() {
             return cmpDesc();
         }
-    }
+    } */
+
+
 
 
 }
