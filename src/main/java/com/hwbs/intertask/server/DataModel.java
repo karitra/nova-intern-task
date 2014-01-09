@@ -28,10 +28,12 @@ public class DataModel {
 
     private static DataModel self;
 
-    private ViewParameters parameters = new ViewParameters(CommonConfig.TOTAL_RECORDS, CommonConfig.PAGE_SIZE_LIMIT);
+    private ViewParameters parameters   = new ViewParameters(CommonConfig.TOTAL_RECORDS, CommonConfig.PAGE_SIZE_LIMIT);
 
     private long cacheUpdateStartTimeMS = 0;
-    private static boolean loading = true;
+    private static boolean loading      = true;
+
+    private long databaseRecordsNum     = 0;
 
     private DataModel() {
 
@@ -206,19 +208,25 @@ public class DataModel {
 
 
 
-    public void setUnorderedModel(NameRecord[] model) {
+    public synchronized void setUnorderedModel(NameRecord[] model) {
         this.allCached = model;
         baseCacheValid = true;
+        setLoadingState(false);
+        setDatabaseRecordsNum(model.length);
     }
 
-    public void setOrderedBy1stModel(NameRecord[] model) {
+    public synchronized void setOrderedBy1stModel(NameRecord[] model) {
         this.orderedBy1st = model;
         fstCacheValid = true;
+        setLoadingState(false);
+        setDatabaseRecordsNum(model.length);
     }
 
-    public void setOrderedBy2ndModel(NameRecord[] model) {
+    public synchronized void setOrderedBy2ndModel(NameRecord[] model) {
         this.orderedBy2nd = model;
         scdCacheValid = true;
+        setLoadingState(false);
+        setDatabaseRecordsNum(model.length);
     }
 
     public NameRecord[] getUnordered() {
@@ -252,8 +260,8 @@ public class DataModel {
 
 
     public synchronized boolean isMemStoreReady() {
-        return baseCacheValid &&
-                fstCacheValid && scdCacheValid;
+        return ((baseCacheValid &&
+                fstCacheValid  && scdCacheValid) && !loading);
     }
 
     public boolean isPrefetchedStroreReady() {
@@ -269,11 +277,31 @@ public class DataModel {
     }
 
     public synchronized CacheState getCacheState() {
-        return new CacheState( isMemStoreReady(), loading, cacheInactiveTimeMS() );
+        //return new CacheState( isMemStoreReady(), loading, isEmpty(), cacheInactiveTimeMS() );
+        return new CacheState( isMemStoreReady(), loading, isEmpty(), cacheInactiveTimeMS() );
+        //return new CacheState( isMemStoreReady(), cacheInactiveTimeMS() );
     }
 
+    //
+    // Better name is: startup state
+    //
     public synchronized void setLoadingState(boolean isLoading) {
+         loading = isLoading;
+    }
+
+    public synchronized void setLoadingState(boolean isLoading, long recNum) {
         loading = isLoading;
+        this.databaseRecordsNum = recNum;
+    }
+
+
+    public synchronized boolean isEmpty() {
+        return  databaseRecordsNum == 0;
+    }
+
+    public synchronized void setDatabaseRecordsNum(long num) {
+        //this.setLoadingState(false);
+        this.databaseRecordsNum = num;
     }
 
 //    public synchronized void setEmpty(boolean isLoading) {

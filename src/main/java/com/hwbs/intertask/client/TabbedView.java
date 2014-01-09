@@ -760,23 +760,25 @@ public class TabbedView {
         @Override
         public void onSuccess(CacheStateProxy response) {
 
-            if (response.isLoading()) {
-                return;
-            } else if (!response.isValid()) {
-                t.cancel();
+            if (!response.isValid()) {
 
-                setGenBtDefault();
-                return;
-            }
+                if (!response.isLoading() && response.isEmpty()) {
+                    GWT.log( "Cache is empty, get out of here: " + response.getTimeRegenerating() + " ms passed");
 
-            //
-            // Following check doesn't needed now, but is here as reminder in case the application startup flow
-            // changes
-            //
-            if (response.isValid()) {
+                    t.cancel();
+                    setGenBtDefault();
+                    return;
+                }
 
                 //
-                // cache is ready, stop polling
+                // Continue polling if cache not valid
+                //
+                GWT.log( "Cache not ready yet: " + response.getTimeRegenerating() + " ms passed" );
+                setGenBtRunning( response.getTimeRegenerating() / 1000.0f );
+            } else { // !loading and (valid or empty)
+
+                //
+                // cache is ready or empty, stop polling
                 //
                 t.cancel();
 
@@ -790,7 +792,7 @@ public class TabbedView {
 
                         // resetLoadedState();
 
-                        pageSize  = response.getPageSize();
+                        pageSize = response.getPageSize();
                         int items = response.getTotalItems();
 
                         GWT.log("pageSize: " + pageSize);
@@ -807,20 +809,22 @@ public class TabbedView {
                         //dataProvider.updateRowCount( items, true);
                         setGenBtDefault();
                     }
-                });
 
-            } else {
-                //
-                // not ready, continue polling
-                //
-                GWT.log( "Cache not ready yet: " + response.getTimeRegenerating() +  " ms passed" );
-                // setGenBtRunning( response.getTimeRegenerating() / 1000.0f );
+                    @Override
+                    public void onFailure(ServerFailure e) {
+                        GWT.log("error in requesting view parameters: " + e.getMessage());
+                        t.cancel();
+                        setGenBtDefault();
+                    }
+                });
             }
         }
 
+
         @Override
         public void onFailure(ServerFailure e) {
-            GWT.log("error in requesting view parameters: " + e.getMessage());
+            GWT.log("error in requesting server state: " + e.getMessage());
+            t.cancel();
         }
     }
 

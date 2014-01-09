@@ -37,7 +37,7 @@ public class SimpleExecutor implements Runnable {
         this.feedback = new Feedback();
         this.sentry   = new Object();
 
-        this.msgQueue = new ArrayBlockingQueue<Command>(MESSAGE_QUEUE_SIZE);
+        this.msgQueue = new ArrayBlockingQueue<>(MESSAGE_QUEUE_SIZE);
     }
 
     @Override
@@ -73,20 +73,20 @@ public class SimpleExecutor implements Runnable {
 
     @Deprecated
     public void runOld() {
-        Command actualcommand;
+        Command actualCommand;
         while (!shouldStop()) {
             try {
                 synchronized (sentry) {
                     sentry.wait();
                     running = true;
-                    actualcommand = cmd;
+                    actualCommand = cmd;
                 }
             } catch (InterruptedException e) {
                 break;
             }
 
             try {
-                switch (actualcommand) {
+                switch (actualCommand) {
                     case Halt:
                         task.halt();
                         stopIt();
@@ -127,7 +127,7 @@ public class SimpleExecutor implements Runnable {
         try {
 
             for(int retries = 0;
-                !msgQueue.offer( Command.Execute, 100, TimeUnit.MILLISECONDS ) && retries < SUBMIT_RETRIES_NUM;
+                !msgQueue.offer( cmd, 100, TimeUnit.MILLISECONDS ) && retries < SUBMIT_RETRIES_NUM;
                 retries++);
 
         } catch(InterruptedException e) {

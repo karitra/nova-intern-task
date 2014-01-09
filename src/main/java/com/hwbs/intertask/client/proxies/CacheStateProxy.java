@@ -13,4 +13,5 @@ public interface CacheStateProxy extends ValueProxy {
     public boolean isValid();
     public long getTimeRegenerating();
     public boolean isLoading();
+    public boolean isEmpty();
 }

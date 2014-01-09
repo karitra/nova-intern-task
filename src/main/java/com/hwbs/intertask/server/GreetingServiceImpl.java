@@ -51,7 +51,7 @@ public class GreetingServiceImpl extends RemoteServiceServlet implements
 
     private SimpleExecutor genWrk;
     private QueuedExecutor dbWrk;
-    private Executor dbexec;
+
     private Thread          genThread;
     private Thread           dbThread;
 
@@ -116,7 +116,6 @@ public class GreetingServiceImpl extends RemoteServiceServlet implements
     }
 
 
-
     @Override
     public void destroy() {
         super.destroy();
@@ -130,12 +129,16 @@ public class GreetingServiceImpl extends RemoteServiceServlet implements
 
             dbWrk.halt();
             dbThread.join();
+
+            waitSortingCompletion();
+
         } catch(InterruptedException e) {
             // pass
         }
 
         detachDB();
         logger.log(Level.INFO, "service destroyed");
+        System.err.println("ready to shutdown service");
     }
 
     //
@@ -181,6 +184,10 @@ public class GreetingServiceImpl extends RemoteServiceServlet implements
     //
     private void startLoader() {
 
+
+        DataModel.getInstance().invalidateAllCaches();
+
+
         Future<?> loadTask = pion.submit(new Runnable() {
             @Override
             public void run() {
@@ -195,7 +202,6 @@ public class GreetingServiceImpl extends RemoteServiceServlet implements
                     conn = connector.connect();
                     NameRecord[] dbRecs = getCache(); //new NameRecord[DataModel.TOTAL_RECORDS];
 
-                    DataModel.getInstance().invalidateAllCaches();
 
                     Statement stmt = conn.createStatement();
                     ResultSet res  = stmt.executeQuery("select count(*) from names");
@@ -210,7 +216,9 @@ public class GreetingServiceImpl extends RemoteServiceServlet implements
                     if (count == 0) {
                         // no records yet, done
                         logger.log(Level.WARNING, "database is empty, should we force generate?");
-                        model.setLoadingState(false);
+                        if (null != model) {
+                            model.setLoadingState(false, 0);
+                        }
                         return;
                     }
 
@@ -261,15 +269,21 @@ public class GreetingServiceImpl extends RemoteServiceServlet implements
                     //
                     // Record read at this point, sort them
                     //
+
+                    if (null != model) {
+                        model.setDatabaseRecordsNum( CommonConfig.TOTAL_RECORDS );
+                    }
+
                     startSorting(dbRecs);
 
                     //
-                    // Wait for sorting completion to inform clients
+                    // Wait for sorting completion, inform clients
                     //
                     new Thread( new Runnable() {
                         @Override
                         public void run() {
-                            sortingDoneSentry.waitAll();
+                            //sortingDoneSentry.waitAll();
+                            waitSortingCompletion();
 
                             if (null != model)
                                 model.setLoadingState(false);
@@ -391,7 +405,7 @@ public class GreetingServiceImpl extends RemoteServiceServlet implements
         }
     }
 
-    private void waitSortingCompetion() {
+    private void waitSortingCompletion() {
         sortingDoneSentry.waitAll();
     }
 
@@ -543,7 +557,8 @@ public class GreetingServiceImpl extends RemoteServiceServlet implements
             logger.log(Level.INFO, "Wait for previous sorting to be done..." );
 
             shouldHaltDBLoad = true;
-            sortingDoneSentry.waitAll();
+            waitSortingCompletion();
+            //sortingDoneSentry.waitAll();
 
             DataModel.getInstance().invalidateAllCaches();
 
@@ -579,7 +594,9 @@ public class GreetingServiceImpl extends RemoteServiceServlet implements
                 @Override
                 public void run() {
 
-                    sortingDoneSentry.waitAll();
+                    //sortingDoneSentry.waitAll();
+                    waitSortingCompletion();
+
                     logger.log(Level.WARNING, "Sorting done, in (approximitly): " +
                             (System.nanoTime() - q) / 1000000 + "ms" );
                     Runtime.getRuntime().gc();
@@ -650,6 +667,9 @@ public class GreetingServiceImpl extends RemoteServiceServlet implements
     // Service methods
     //
     public boolean generate() throws IllegalStateException {
+        if (null != model)
+            model.setDatabaseRecordsNum(CommonConfig.TOTAL_RECORDS);
+
         return genWrk.submit();
     }
 
